@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000"/>
+  <link rel="manifest" href="manifest.json">
+  <title>Speedometer</title>
+  <style>
+    body {
+      margin: 0;
+      background: black;
+      color: white;
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      text-align: center;
+    }
+    #speed {
+      font-size: 80px;
+      font-weight: bold;
+    }
+    #unit {
+      font-size: 32px;
+      margin-bottom: 20px;
+    }
+    button {
+      padding: 12px 20px;
+      font-size: 18px;
+      border: none;
+      border-radius: 10px;
+      background: white;
+      color: black;
+    }
+  </style>
+</head>
+<body>
+  <div id="speed">0</div>
+  <div id="unit">MPH</div>
+  <button onclick="toggleUnit()">Switch to KPH</button>
+
+  <script>
+    let useMPH = true;
+
+    function toggleUnit() {
+      useMPH = !useMPH;
+      document.getElementById("unit").textContent = useMPH ? "MPH" : "KPH";
+      document.querySelector("button").textContent = `Switch to ${useMPH ? "KPH" : "MPH"}`;
+    }
+
+    function updateSpeed(position) {
+      let speedMps = position.coords.speed;
+      if (speedMps === null || speedMps < 0) speedMps = 0;
+      let speed = useMPH ? speedMps * 2.23694 : speedMps * 3.6;
+      document.getElementById("speed").textContent = Math.round(speed);
+    }
+
+    function handleError(error) {
+      document.getElementById("speed").textContent = "No GPS";
+    }
+
+    if ("geolocation" in navigator) {
+      navigator.geolocation.watchPosition(updateSpeed, handleError, {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 5000
+      });
+    } else {
+      document.getElementById("speed").textContent = "Not supported";
+    }
+
+    // Register service worker
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("service-worker.js");
+    }
+  </script>
+</body>
+</html>
