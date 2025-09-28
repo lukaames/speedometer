@@ -4,7 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#000000"/>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <title>Speedometer</title>
   <style>
     body {
@@ -25,7 +28,12 @@
     }
     #unit {
       font-size: 32px;
-      margin-bottom: 20px;
+      margin-bottom: 10px;
+    }
+    #roadName {
+      font-size: 22px;
+      margin-top: 20px;
+      color: #ccc;
     }
     button {
       padding: 12px 20px;
@@ -34,6 +42,7 @@
       border-radius: 10px;
       background: white;
       color: black;
+      margin-top: 10px;
     }
   </style>
 </head>
@@ -41,21 +50,28 @@
   <div id="speed">0</div>
   <div id="unit">MPH</div>
   <button onclick="toggleUnit()">Switch to KPH</button>
+  <div id="roadName">Unknown Road</div>
 
   <script>
     let useMPH = true;
+    let wakeLock = null;
 
+    // Toggle units
     function toggleUnit() {
       useMPH = !useMPH;
       document.getElementById("unit").textContent = useMPH ? "MPH" : "KPH";
       document.querySelector("button").textContent = `Switch to ${useMPH ? "KPH" : "MPH"}`;
     }
 
+    // Update speed
     function updateSpeed(position) {
       let speedMps = position.coords.speed;
       if (speedMps === null || speedMps < 0) speedMps = 0;
       let speed = useMPH ? speedMps * 2.23694 : speedMps * 3.6;
       document.getElementById("speed").textContent = Math.round(speed);
+
+      // Reverse geocode road name
+      reverseGeocode(position.coords.latitude, position.coords.longitude);
     }
 
     function handleError(error) {
@@ -72,9 +88,58 @@
       document.getElementById("speed").textContent = "Not supported";
     }
 
-    // Register service worker
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("service-worker.js");
+    // Reverse geocode road name using OpenStreetMap Nominatim
+    let lastGeocode = null;
+    function reverseGeocode(lat, lon) {
+      // Only update if moved ~50m to reduce requests
+      if (lastGeocode && getDistance(lastGeocode.lat, lastGeocode.lon, lat, lon) < 50) return;
+      lastGeocode = {lat, lon};
+
+      fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`)
+        .then(resp => resp.json())
+        .then(data => {
+          if (data && data.address) {
+            let road = data.address.road || data.address.pedestrian || data.address.neighbourhood || "Unknown Road";
+            document.getElementById("roadName").textContent = road;
+          }
+        })
+        .catch(() => {});
+    }
+
+    // Simple distance formula (meters)
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371000; // meters
+      const toRad = x => x * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    // Keep screen awake
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+          wakeLock.addEventListener('release', () => console.log('Wake Lock released'));
+        }
+      } catch (err) {
+        console.error(`Wake Lock error: ${err.name}, ${err.message}`);
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (wakeLock !== null && document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    });
+
+    requestWakeLock();
+
+    // Register service worker for PWA
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('service-worker.js');
     }
   </script>
 </body>
